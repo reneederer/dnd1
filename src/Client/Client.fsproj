@@ -10,7 +10,7 @@
         <None Include="index.html" />
         <None Include="paket.references" />
         <Compile Include="List.fs" />
-        <Compile Include="DndKitDynamic.fs" />
+        <Compile Include="DragDrop.fs" />
         <Compile Include="Index.fs" />
         <Compile Include="App.fs" />
         <None Include="vite.config.mts" />
