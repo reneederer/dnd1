@@ -41,6 +41,10 @@ let view model dispatch =
                 Draggable { id = "event-1"; content = Html.text "🟦 Event 1 (drag me)" }
                 Droppable { id = "slot-1"; render = fun _ -> Html.text "Drop here" }
                 Droppable { id = "slot-2"; render = fun _ -> Html.text "Another drop zone" }
+                Draggable { id = "event-2"; content = Html.text "🟦 Event 2 (drag me)" }
+                Droppable { id = "slot-3"; render = fun _ -> Html.text "Another drop zone" }
+                Droppable { id = "slot-4"; render = fun _ -> Html.text "Another drop zone" }
+                Droppable { id = "slot-5"; render = fun _ -> Html.text "Another drop zone" }
             ]
         ]
     ]
