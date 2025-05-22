@@ -6,6 +6,7 @@ open DragDrop
 open Browser.Dom
 open Fable.Core
 open JsInterop
+open Fable.SimpleJson
 
 type Model = {
     Dragged: string option
@@ -25,26 +26,55 @@ let update msg model =
         { model with Dragged = None }, Cmd.none
 
 let view model dispatch =
-    let handleDragEnd (ev: obj) =
-        let activeId = ev?active?id
-        let overId = 
-            let over = ev?over
-            if isNull over then None
-            else Some (over?id |> string)
-        
-        dispatch (DragEnded(activeId, overId))
-
     Html.div [
-        prop.style [ style.padding 20 ]
-        prop.children [
-            DndContext handleDragEnd [
-                Draggable { id = "event-1"; content = Html.text "🟦 Event 1 (drag me)" }
-                Droppable { id = "slot-1"; render = fun _ -> Html.text "Drop here" }
-                Droppable { id = "slot-2"; render = fun _ -> Html.text "Another drop zone" }
-                Draggable { id = "event-2"; content = Html.text "🟦 Event 2 (drag me)" }
-                Droppable { id = "slot-3"; render = fun _ -> Html.text "Another drop zone" }
-                Droppable { id = "slot-4"; render = fun _ -> Html.text "Another drop zone" }
-                Droppable { id = "slot-5"; render = fun _ -> Html.text "Another drop zone" }
+        // Native HTML draggable elements
+        Html.div [
+            prop.id "native-item-1"
+            prop.draggable true
+            prop.style [
+                style.padding 10
+                style.margin 5
+                style.backgroundColor "#e2e2e2"
+                style.cursor.move
             ]
+        ]
+        Html.div [
+            prop.id "native-item-2" 
+            prop.text "Native Item 2"
+            prop.style [
+                style.padding 10
+                style.margin 5
+                style.backgroundColor "#e2e2e2"
+                style.cursor.move
+            ]
+        ]
+        
+        NativeDragManager ["native-item-1"; "native-item-2"]
+        
+        // React DnD Area
+        DndContext (Some (fun ev -> 
+            printfn "Drag ended: %A" ev
+            console.log ev
+        )) [
+            // React draggable
+            Draggable {
+                id = "react-item-1"
+                content = Html.text "React Draggable"
+            }
+            
+            Droppable {
+                id = "mixed-dropzone"
+                //onDrop = fun element ->
+                //    match element with
+                //    | Some el -> 
+                //        printfn "Dropped native element: %s" el.id
+                //        // You can access all DOM element properties here
+                //    | None -> 
+                //        printfn "Dropped React element"
+                children = fun isOver ->
+                    Html.div [
+                        prop.text (if isOver then "Release to drop!" else "Drop here (accepts both)")
+                    ]
+            }
         ]
     ]
