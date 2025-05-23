@@ -27,54 +27,49 @@ let update msg model =
 
 let view model dispatch =
     Html.div [
-        // Native HTML draggable elements
-        Html.div [
-            prop.id "native-item-1"
-            prop.draggable true
-            prop.style [
-                style.padding 10
-                style.margin 5
-                style.backgroundColor "#e2e2e2"
-                style.cursor.move
-            ]
-        ]
-        Html.div [
-            prop.id "native-item-2" 
-            prop.text "Native Item 2"
-            prop.style [
-                style.padding 10
-                style.margin 5
-                style.backgroundColor "#e2e2e2"
-                style.cursor.move
-            ]
-        ]
+        // Your fancytree component (this would be from your UI framework)
         
-        NativeDragManager ["native-item-1"; "native-item-2"]
+        // Enable dragging for fancytree nodes
         
-        // React DnD Area
-        DndContext (Some (fun ev -> 
-            printfn "Drag ended: %A" ev
+        // Regular DnD context
+        DndContext (Some (fun ev ->
             console.log ev
-        )) [
-            // React draggable
-            Draggable {
-                id = "react-item-1"
-                content = Html.text "React Draggable"
-            }
-            
-            Droppable {
-                id = "mixed-dropzone"
-                //onDrop = fun element ->
-                //    match element with
-                //    | Some el -> 
-                //        printfn "Dropped native element: %s" el.id
-                //        // You can access all DOM element properties here
-                //    | None -> 
-                //        printfn "Dropped React element"
-                children = fun isOver ->
-                    Html.div [
-                        prop.text (if isOver then "Release to drop!" else "Drop here (accepts both)")
+            if not <| isNullOrUndefined ev?over then
+                printfn $"Drag from: {ev?active?id} to {ev?over?id}")) [
+            DraggableAndDroppable
+              { id = "draggable1"
+                children = (fun isDragging isOver -> Html.text $"draggable1 {isDragging} {isOver}")
+              }
+            Draggable
+              { id = "draggable2"
+                content =
+                  Html.div
+                    [ //prop.style [ style.backgroundColor.brown; style.maxWidth 70 ]
+                      prop.text "draggable2"
                     ]
-            }
+              }
+            Droppable
+              { id = "dropzone1"
+                children = fun isOver ->
+                    Html.div
+                      [ prop. style [ style.minHeight 100; style.backgroundColor "red" ]
+                        prop.children
+                          [ Html.text (if isOver then "Drop node here!" else "Drop Zone")
+                            Droppable
+                              { 
+                                id = "dropzone2"
+                                children = fun isOver ->
+                                    Html.div [
+                                        prop.style [ style.backgroundColor "lightgreen" ]
+                                        prop.text (if isOver then "Drop node here2!" else "Drop Zone2")
+                                    ]
+                            }
+                          ]
+                    ]
+                }
+            Draggable
+              { id = "draggable3"
+                content = Html.text "draggable3"
+              }
         ]
     ]

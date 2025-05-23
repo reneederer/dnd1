@@ -7,7 +7,7 @@ open Fable.React
 open Browser.Types
 open Browser
 
-// DnD Kit Imports
+// DnD Kit Imports (keeping your existing imports)
 [<Import("useDraggable", from="@dnd-kit/core")>]
 let private useDraggable: obj -> obj = jsNative
 
@@ -26,7 +26,7 @@ let private useSensor: obj -> obj = jsNative
 [<Import("useSensors", from="@dnd-kit/core")>]
 let private useSensors: obj -> obj = jsNative
 
-// Types
+// Types (keeping your existing types)
 type DraggableProps = { 
     id: string 
     content: ReactElement 
@@ -34,65 +34,91 @@ type DraggableProps = {
 
 type DroppableProps = { 
     id: string 
-    //onDrop: Element option -> unit // Accepts both React and native elements
     children: bool -> ReactElement 
 }
 
-// React Draggable Component
 [<ReactComponent>]
 let Draggable (props: DraggableProps) =
     let dnd = useDraggable {| id = props.id |}
     
-    let transformStyle = 
-        if not (isNull (box dnd?transform)) then
-            let x = unbox<float> dnd?transform?x
-            let y = unbox<float> dnd?transform?y
-            [ style.transform.translate(int x, int y) ]
-        else
-            []
-
     Html.div [
         prop.ref (unbox dnd?setNodeRef)
-        prop.style ([
+        prop.style [
+            if not (isNull (box dnd?transform)) then
+                let x = unbox<float> dnd?transform?x
+                let y = unbox<float> dnd?transform?y
+                style.transform.translate(int x, int y)
+            
             style.cursor.grab
-            style.border(2, borderStyle.solid, color.red)
-            style.padding 10
-            style.marginBottom 8
-            style.backgroundColor "#fee2e2"
             style.position.relative
             style.zIndex (if unbox<bool> dnd?isDragging then 1 else 0)
-        ] @ transformStyle)
+        ]
         prop.onPointerDown (unbox dnd?listeners?onPointerDown)
         prop.onKeyDown (unbox dnd?listeners?onKeyDown)
         prop.children [ props.content ]
     ]
 
-// Droppable Component (handles both React and native drops)
+// Simplified Droppable Component (removed predefined styles)
 [<ReactComponent>]
 let Droppable (props: DroppableProps) =
-    let dnd = useDroppable {| 
-        id = props.id
-        //onDrop = fun ev -> 
-        //    let element = 
-        //        if not (isNull ev?active?node?current) then 
-        //            Some (unbox ev?active?node?current)
-        //        else None
-        //    props.onDrop element
-    |}
+    let dnd = useDroppable {| id = props.id |}
     
     Html.div [
         prop.ref (unbox dnd?setNodeRef)
         prop.children [ props.children (unbox<bool> dnd?isOver) ]
+    ]
+
+type DragAndDropProps = {
+    id: string
+    //onDrop: string -> unit // id of dropped item
+    children: bool -> bool -> ReactElement // (isDragging, isOver) -> ReactElement
+}
+
+[<ReactComponent>]
+let DraggableAndDroppable (props: DragAndDropProps) =
+    let draggable = useDraggable {| id = props.id |}
+    let droppable = useDroppable {| id = props.id |}
+    
+    // Handle drop events
+    React.useEffect(fun () ->
+        if unbox<bool> droppable?isOver && not (unbox<bool> draggable?isDragging) then
+            //props.onDrop(props.id)
+            ()
+    , [| box droppable?isOver; box draggable?isDragging |])
+    
+    Html.div [
+        // Combine refs from both hooks
+        prop.ref (fun node ->
+            unbox <| draggable?setNodeRef(node)
+            unbox <| droppable?setNodeRef(node)
+        )
+        
+        // Draggable props
+        prop.onPointerDown (unbox draggable?listeners?onPointerDown)
+        prop.onKeyDown (unbox draggable?listeners?onKeyDown)
+        
+        // Style combining both states
         prop.style [
-            style.border(2, borderStyle.solid, color.blue)
-            style.padding 10
-            style.minHeight 60
-            style.marginTop 10
-            style.backgroundColor (if unbox<bool> dnd?isOver then "#dbeafe" else "#f9fafb")
+            if not (isNull (box draggable?transform)) then
+                let x = unbox<float> draggable?transform?x
+                let y = unbox<float> draggable?transform?y
+                style.transform.translate(int x, int y)
+            
+            style.cursor.grab
+            style.position.relative
+            style.zIndex (if unbox<bool> draggable?isDragging then 1 else 0)
+            // Add your own styles here
+        ]
+        
+        // Render children with both states
+        prop.children [ 
+            props.children 
+                (unbox<bool> draggable?isDragging) 
+                (unbox<bool> droppable?isOver) 
         ]
     ]
 
-// DnD Context
+// DnD Context (unchanged from your original)
 [<ReactComponent>]
 let DndContext (onDragEnd: (obj -> unit) option) (children: ReactElement list) =
     let sensors = useSensors(useSensor(pointerSensor))
@@ -109,31 +135,3 @@ let DndContext (onDragEnd: (obj -> unit) option) (children: ReactElement list) =
         |]),
         List.toArray children
     )
-
-// Makes native HTML elements draggable
-[<ReactComponent>]
-let NativeDragManager (elementIds: string list) =
-    React.useEffectOnce(fun () ->
-        let setupElement (id: string) =
-            let el = document.getElementById(id)
-            if not (isNull el) then
-                el.setAttribute("draggable", "true")
-                el.addEventListener("dragstart", fun e ->
-                    let dragEvent = e :?> DragEvent
-                    dragEvent.dataTransfer.setData("text/plain", id)
-                    // Required for Firefox
-                    dragEvent.dataTransfer.effectAllowed <- "move"
-                )
-        
-        // Setup all specified elements
-        elementIds |> List.iter setupElement
-        
-        React.createDisposable(fun () -> 
-            elementIds |> List.iter (fun id ->
-                let el = document.getElementById(id)
-                if not (isNull el) then
-                    el.removeAttribute("draggable")
-            )
-        )
-    )
-    Html.none
