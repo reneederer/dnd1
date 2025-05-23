@@ -26,7 +26,6 @@ let private useSensor: obj -> obj = jsNative
 [<Import("useSensors", from="@dnd-kit/core")>]
 let private useSensors: obj -> obj = jsNative
 
-// Types (keeping your existing types)
 type DraggableProps = { 
     id: string 
     content: ReactElement 
@@ -52,6 +51,7 @@ let Draggable (props: DraggableProps) =
             style.cursor.grab
             style.position.relative
             style.zIndex (if unbox<bool> dnd?isDragging then 1 else 0)
+            style.display.tableCell
         ]
         prop.onPointerDown (unbox dnd?listeners?onPointerDown)
         prop.onKeyDown (unbox dnd?listeners?onKeyDown)
@@ -75,7 +75,7 @@ type DragAndDropProps = {
 }
 
 [<ReactComponent>]
-let DraggableAndDroppable (props: DragAndDropProps) =
+let DndDiv (props: DragAndDropProps) =
     let draggable = useDraggable {| id = props.id |}
     let droppable = useDroppable {| id = props.id |}
     
@@ -87,11 +87,11 @@ let DraggableAndDroppable (props: DragAndDropProps) =
     , [| box droppable?isOver; box draggable?isDragging |])
     
     Html.div [
-        // Combine refs from both hooks
         prop.ref (fun node ->
             unbox <| draggable?setNodeRef(node)
             unbox <| droppable?setNodeRef(node)
         )
+        prop.style [ style.backgroundColor.black ]
         
         // Draggable props
         prop.onPointerDown (unbox draggable?listeners?onPointerDown)
@@ -107,6 +107,7 @@ let DraggableAndDroppable (props: DragAndDropProps) =
             style.cursor.grab
             style.position.relative
             style.zIndex (if unbox<bool> draggable?isDragging then 1 else 0)
+            style.display.tableCell
             // Add your own styles here
         ]
         
@@ -120,13 +121,11 @@ let DraggableAndDroppable (props: DragAndDropProps) =
 
 // DnD Context (unchanged from your original)
 [<ReactComponent>]
-let DndContext (onDragEnd: (obj -> unit) option) (children: ReactElement list) =
+let DndContext (onDragEnd: (obj -> unit)) (children: ReactElement list) =
     let sensors = useSensors(useSensor(pointerSensor))
     
     let contextProps = 
-        match onDragEnd with
-        | Some handler -> [| "onDragEnd" ==> handler |]
-        | None -> [||]
+        [| "onDragEnd" ==> onDragEnd |]
     
     ReactBindings.React.createElement(
         dndContext,
