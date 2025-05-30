@@ -39,33 +39,27 @@ type DragAndDropProps = {
 
 [<ReactComponent>]
 let DndDiv (props: DragAndDropProps) =
-    let droppable = useDroppable {| 
-        id = props.id 
-        data = createObj [ "acceptsExternal" ==> true ]
-    |}
+    let draggable = useDraggable {| id = props.id |}
+    let droppable = useDroppable {| id = props.id |}
     
     let dropRef = React.useRef<Browser.Types.Element option>(None)
     
-    // Enhanced drag event handling with Event and e? syntax
     React.useEffect(fun () ->
         let handleDragEnter (e: Event) =
             e?preventDefault()
-            console.log("dragEnter", props.id)
             droppable?isOver <- true
         
         let handleDragOver (e: Event) =
             e?preventDefault()
             e?dataTransfer?dropEffect <- "move"
-            console.log("dragOver", props.id)  // Log dragOver events
             droppable?isOver <- true
+            console.log ("over", e)
         
         let handleDragLeave (e: Event) =
-            console.log("dragLeave", props.id)
             droppable?isOver <- false
         
         let handleDrop (e: Event) =
             e?preventDefault()
-            console.log("drop", props.id)
             let data = e?dataTransfer?getData("text/plain")
             if not (System.String.IsNullOrEmpty(data)) then
                 props.onDrop(data)
@@ -93,6 +87,7 @@ let DndDiv (props: DragAndDropProps) =
             if not (isNull node) then
                 dropRef.current <- Some node
                 droppable?setNodeRef(node)
+                draggable?setNodeRef(node)
         )
         prop.style [
             style.border(2, borderStyle.dashed, "gray")
@@ -102,49 +97,39 @@ let DndDiv (props: DragAndDropProps) =
             style.display.flex
             style.alignItems.center
             style.justifyContent.center
-            if unbox<bool> droppable?isOver then
+            style.cursor.grab
+            if droppable?isOver then
                 style.backgroundColor "lightblue"
+            if draggable?isDragging then
+                style.opacity 0.5
         ]
+        prop.onPointerDown draggable?listeners?onPointerDown
+        prop.onKeyDown draggable?listeners?onKeyDown
         prop.children [ props.children ]
     ]
-
-[<ReactComponent>]
-let ExternalDraggableElement() =
-    React.useEffectOnce(fun () ->
-        let element = document.getElementById("externalEl")
-        element?setAttribute("draggable", "true")
-        
-        let handleDragStart (e: Event) =
-            console.log("External drag started")
-            e?dataTransfer?setData("text/plain", "externalEl")
-            e?dataTransfer?effectAllowed <- "move"
-            
-        element?addEventListener("dragstart", handleDragStart)
-        
-        { new System.IDisposable with
-            member _.Dispose() =
-                element?removeEventListener("dragstart", handleDragStart)
-        }
-    )
-    Html.none
-
-
-
-
-
 
 [<ReactComponent>]
 let DndContext (onDragEnd: obj -> unit) (children: ReactElement list) =
     let sensors = useSensors(useSensor(pointerSensor))
     let activeId, setActiveId = React.useState<string option>(None)
     
+    let handleDragStart (e: obj) =
+        let activeId = string e?active?id
+        console.log("Drag started", activeId)
+        setActiveId(Some activeId)
+    
+    let handleDragEnd (e: obj) =
+        let activeId = e?active?id
+        console.log("Drag ended", activeId)
+        setActiveId(None)
+        onDragEnd e
+    
     let contextProps = 
-        [| 
-            "onDragStart" ==> (fun e -> setActiveId(e?active?id))
-            "onDragEnd" ==> (fun e ->
-                setActiveId(None)
-                onDragEnd e)
+        createObj [|
+            "onDragStart" ==> handleDragStart
+            "onDragEnd" ==> handleDragEnd
             "collisionDetection" ==> closestCenter
+            "sensors" ==> sensors
         |]
     
     let overlayContent =
@@ -152,6 +137,9 @@ let DndContext (onDragEnd: obj -> unit) (children: ReactElement list) =
         | Some id -> 
             Html.div [
                 prop.style [
+                    style.position.absolute
+                    style.pointerEvents.none
+                    style.zIndex 9999
                     style.backgroundColor "#4CAF50"
                     style.color.white
                     style.padding 10
@@ -163,17 +151,6 @@ let DndContext (onDragEnd: obj -> unit) (children: ReactElement list) =
         | None -> Html.none
     
     Html.div [
-        ReactBindings.React.createElement(
-            dndContext,
-            createObj (Array.append contextProps [|
-                "sensors" ==> sensors
-            |]),
-            List.toArray children
-        )
-        
-        ReactBindings.React.createElement(
-            dragOverlay,
-            createObj [||],
-            [ overlayContent ]
-        )
+        ReactBindings.React.createElement(dndContext, contextProps, List.toArray children)
+        ReactBindings.React.createElement(dragOverlay, createObj [||], [ overlayContent ])
     ]

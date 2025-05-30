@@ -62,7 +62,9 @@ let App model dispatch =
     Html.div [
         ExternalDraggableElement()
         
-        Html.h1 [ prop.text "Drag and Drop Example" ]
+        Html.h1
+          [ prop.draggable true
+            prop.text "Drag and Drop Example" ]
         
         Html.div [
             prop.style [ 
