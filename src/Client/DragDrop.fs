@@ -7,7 +7,6 @@ open Fable.React
 open Browser.Types
 open Browser
 
-// DnD Kit Imports (keeping your existing imports)
 [<Import("useDraggable", from="@dnd-kit/core")>]
 let private useDraggable: obj -> obj = jsNative
 
@@ -26,111 +25,155 @@ let private useSensor: obj -> obj = jsNative
 [<Import("useSensors", from="@dnd-kit/core")>]
 let private useSensors: obj -> obj = jsNative
 
-type DraggableProps = { 
-    id: string 
-    content: ReactElement 
-}
+[<Import("closestCenter", from="@dnd-kit/core")>]
+let private closestCenter: obj = jsNative
 
-type DroppableProps = { 
-    id: string 
-    children: bool -> ReactElement 
-}
-
-[<ReactComponent>]
-let Draggable (props: DraggableProps) =
-    let dnd = useDraggable {| id = props.id |}
-    
-    Html.div [
-        prop.ref (unbox dnd?setNodeRef)
-        prop.style [
-            if not (isNull (box dnd?transform)) then
-                let x = unbox<float> dnd?transform?x
-                let y = unbox<float> dnd?transform?y
-                style.transform.translate(int x, int y)
-            
-            style.cursor.grab
-            style.position.relative
-            style.zIndex (if unbox<bool> dnd?isDragging then 1 else 0)
-            style.display.tableCell
-        ]
-        prop.onPointerDown (unbox dnd?listeners?onPointerDown)
-        prop.onKeyDown (unbox dnd?listeners?onKeyDown)
-        prop.children [ props.content ]
-    ]
-
-// Simplified Droppable Component (removed predefined styles)
-[<ReactComponent>]
-let Droppable (props: DroppableProps) =
-    let dnd = useDroppable {| id = props.id |}
-    
-    Html.div [
-        prop.ref (unbox dnd?setNodeRef)
-        prop.children [ props.children (unbox<bool> dnd?isOver) ]
-    ]
+[<Import("DragOverlay", from="@dnd-kit/core")>]
+let private dragOverlay: obj = jsNative
 
 type DragAndDropProps = {
     id: string
-    //onDrop: string -> unit // id of dropped item
-    children: bool -> bool -> ReactElement // (isDragging, isOver) -> ReactElement
+    onDrop: string -> unit
+    children: ReactElement
 }
 
 [<ReactComponent>]
 let DndDiv (props: DragAndDropProps) =
-    let draggable = useDraggable {| id = props.id |}
-    let droppable = useDroppable {| id = props.id |}
+    let droppable = useDroppable {| 
+        id = props.id 
+        data = createObj [ "acceptsExternal" ==> true ]
+    |}
     
-    // Handle drop events
+    let dropRef = React.useRef<Browser.Types.Element option>(None)
+    
+    // Enhanced drag event handling with Event and e? syntax
     React.useEffect(fun () ->
-        if unbox<bool> droppable?isOver && not (unbox<bool> draggable?isDragging) then
-            //props.onDrop(props.id)
-            ()
-    , [| box droppable?isOver; box draggable?isDragging |])
+        let handleDragEnter (e: Event) =
+            e?preventDefault()
+            console.log("dragEnter", props.id)
+            droppable?isOver <- true
+        
+        let handleDragOver (e: Event) =
+            e?preventDefault()
+            e?dataTransfer?dropEffect <- "move"
+            console.log("dragOver", props.id)  // Log dragOver events
+            droppable?isOver <- true
+        
+        let handleDragLeave (e: Event) =
+            console.log("dragLeave", props.id)
+            droppable?isOver <- false
+        
+        let handleDrop (e: Event) =
+            e?preventDefault()
+            console.log("drop", props.id)
+            let data = e?dataTransfer?getData("text/plain")
+            if not (System.String.IsNullOrEmpty(data)) then
+                props.onDrop(data)
+            droppable?isOver <- false
+        
+        match dropRef.current with
+        | Some node ->
+            node?addEventListener("dragenter", handleDragEnter)
+            node?addEventListener("dragover", handleDragOver)
+            node?addEventListener("dragleave", handleDragLeave)
+            node?addEventListener("drop", handleDrop)
+            
+            { new System.IDisposable with
+                member _.Dispose() =
+                    node?removeEventListener("dragenter", handleDragEnter)
+                    node?removeEventListener("dragover", handleDragOver)
+                    node?removeEventListener("dragleave", handleDragLeave)
+                    node?removeEventListener("drop", handleDrop)
+            }
+        | None -> { new System.IDisposable with member _.Dispose() = () }
+    , [| box dropRef.current |])
     
     Html.div [
         prop.ref (fun node ->
-            unbox <| draggable?setNodeRef(node)
-            unbox <| droppable?setNodeRef(node)
+            if not (isNull node) then
+                dropRef.current <- Some node
+                droppable?setNodeRef(node)
         )
-        prop.style [ style.backgroundColor.black ]
-        
-        // Draggable props
-        prop.onPointerDown (unbox draggable?listeners?onPointerDown)
-        prop.onKeyDown (unbox draggable?listeners?onKeyDown)
-        
-        // Style combining both states
         prop.style [
-            if not (isNull (box draggable?transform)) then
-                let x = unbox<float> draggable?transform?x
-                let y = unbox<float> draggable?transform?y
-                style.transform.translate(int x, int y)
-            
-            style.cursor.grab
-            style.position.relative
-            style.zIndex (if unbox<bool> draggable?isDragging then 1 else 0)
-            style.display.tableCell
-            // Add your own styles here
+            style.border(2, borderStyle.dashed, "gray")
+            style.padding 20
+            style.minHeight 200
+            style.minWidth 300
+            style.display.flex
+            style.alignItems.center
+            style.justifyContent.center
+            if unbox<bool> droppable?isOver then
+                style.backgroundColor "lightblue"
         ]
-        
-        // Render children with both states
-        prop.children [ 
-            props.children 
-                (unbox<bool> draggable?isDragging) 
-                (unbox<bool> droppable?isOver) 
-        ]
+        prop.children [ props.children ]
     ]
 
-// DnD Context (unchanged from your original)
 [<ReactComponent>]
-let DndContext (onDragEnd: (obj -> unit)) (children: ReactElement list) =
+let ExternalDraggableElement() =
+    React.useEffectOnce(fun () ->
+        let element = document.getElementById("externalEl")
+        element?setAttribute("draggable", "true")
+        
+        let handleDragStart (e: Event) =
+            console.log("External drag started")
+            e?dataTransfer?setData("text/plain", "externalEl")
+            e?dataTransfer?effectAllowed <- "move"
+            
+        element?addEventListener("dragstart", handleDragStart)
+        
+        { new System.IDisposable with
+            member _.Dispose() =
+                element?removeEventListener("dragstart", handleDragStart)
+        }
+    )
+    Html.none
+
+
+
+
+
+
+[<ReactComponent>]
+let DndContext (onDragEnd: obj -> unit) (children: ReactElement list) =
     let sensors = useSensors(useSensor(pointerSensor))
+    let activeId, setActiveId = React.useState<string option>(None)
     
     let contextProps = 
-        [| "onDragEnd" ==> onDragEnd |]
+        [| 
+            "onDragStart" ==> (fun e -> setActiveId(e?active?id))
+            "onDragEnd" ==> (fun e ->
+                setActiveId(None)
+                onDragEnd e)
+            "collisionDetection" ==> closestCenter
+        |]
     
-    ReactBindings.React.createElement(
-        dndContext,
-        createObj (Array.append contextProps [|
-            "sensors" ==> sensors
-        |]),
-        List.toArray children
-    )
+    let overlayContent =
+        match activeId with
+        | Some id -> 
+            Html.div [
+                prop.style [
+                    style.backgroundColor "#4CAF50"
+                    style.color.white
+                    style.padding 10
+                    style.borderRadius 4
+                    style.boxShadow(0, 2, 10, "rgba(0,0,0,0.3)")
+                ]
+                prop.text "Custom Ghost"
+            ]
+        | None -> Html.none
+    
+    Html.div [
+        ReactBindings.React.createElement(
+            dndContext,
+            createObj (Array.append contextProps [|
+                "sensors" ==> sensors
+            |]),
+            List.toArray children
+        )
+        
+        ReactBindings.React.createElement(
+            dragOverlay,
+            createObj [||],
+            [ overlayContent ]
+        )
+    ]

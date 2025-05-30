@@ -1,91 +1,99 @@
 module Index
 
 open Feliz
+open Fable.Core.JsInterop
+open Browser.Dom
+open Browser.Types
 open Elmish
 open DragDrop
-open Browser.Dom
 open Fable.Core
-open JsInterop
-open Fable.SimpleJson
 
+[<ReactComponent>]
+let ExternalDraggableElement() =
+    React.useEffectOnce(fun () ->
+        let element = document.getElementById("externalEl")
+        element.setAttribute("draggable", "true")
+        
+        let handleDragStart (e: Browser.Types.Event) =
+            e?dataTransfer?setData("text/plain", "externalEl")
+            e?dataTransfer?effectAllowed <- "move"
+            
+        let handleDragEnd (e: Browser.Types.Event) =
+            // Clear any drag state
+            ()
+            
+        element.addEventListener("dragstart", handleDragStart)
+        element.addEventListener("dragend", handleDragEnd)
+        
+        { new System.IDisposable with
+            member _.Dispose() =
+                element.removeEventListener("dragstart", handleDragStart)
+                element.removeEventListener("dragend", handleDragEnd)
+        }
+    )
+    Html.none
 type Model = {
-    Dragged: string option
+    DroppedItem: string option
+    DraggedItem: string option
     Slots: string list
 }
 
 type Msg =
-    | DragEnded of string * string option
+    | ExternalDropped of string
+    | DndKitDragStarted of string
+    | DndKitDragEnded of obj
 
 let init () = 
-    { Dragged = None; Slots = [ "slot-1"; "slot-2" ] }, Cmd.none
+    { DroppedItem = None; DraggedItem = None; Slots = [ "slot-1"; "slot-2" ] }, Cmd.none
 
 let update msg model =
     match msg with
-    | DragEnded (source, target) ->
-        console.log($"""Dropped {source} into {Option.defaultValue "nothing" target}""")
-        { model with Dragged = None }, Cmd.none
+    | ExternalDropped id ->
+        console.log($"External item dropped: {id}")
+        { model with DroppedItem = Some id }, Cmd.none
+    | DndKitDragStarted id ->
+        { model with DraggedItem = Some id }, Cmd.none
+    | DndKitDragEnded ev ->
+        console.log("Internal DnD event", ev)
+        { model with DraggedItem = None }, Cmd.none
 
-let view model dispatch =
+[<ReactComponent>]
+let App model dispatch =
     Html.div [
-        // Your fancytree component (this would be from your UI framework)
+        ExternalDraggableElement()
         
-        // Enable dragging for fancytree nodes
+        Html.h1 [ prop.text "Drag and Drop Example" ]
         
-        // Regular DnD context
-        DndContext
-            (fun ev ->
-                console.log ev
-                if not <| isNullOrUndefined ev?over then
-                    printfn $"Drag from: {ev?active?id} to {ev?over?id}"
-            )
-            [ DndDiv
-                { id = "draggable1"
-                  children = (fun isDragging isOver ->
-                      Html.div
-                        [
-                          prop.style [ style.backgroundColor.red; style.display.block; style.minWidth 500]
-                          prop.children
-                            [ Html.br []
-                              Html.text "abc"
-                              Html.text $"draggable1 {isDragging} {isOver}"
-                              Html.br []
-                            ]
-                        ]
-                  )
-                }
-              Draggable
-                { id = "draggable2"
-                  content =
-                    Html.div
-                      [ //prop.style [ style.backgroundColor.brown; style.maxWidth 70 ]
-                        prop.text "draggable2"
-                      ]
-                }
-              Droppable
-                { id = "dropzone1"
-                  children = fun isOver ->
-                      Html.div
-                        [ prop. style [ style.minHeight 200; style.backgroundColor "red" ]
-                          prop.children
-                            [ Html.text (if isOver then "Drop node here!" else "Drop Zone")
-                              Droppable
-                                { 
-                                  id = "dropzone2"
-                                  children = fun isOver ->
-                                      Html.div [
-                                          prop.style
-                                            [ style.backgroundColor "lightgreen"
-                                              style.minHeight 60
-                                            ]
-                                          prop.text (if isOver then "Drop node here2!" else "Drop Zone2")
-                                      ]
-                              }
-                            ]
-                      ]
-                  }
-              Draggable
-                { id = "draggable3"
-                  content = Html.text "draggable3"
-                }
-      ]
+        Html.div [
+            prop.style [ 
+                style.display.flex
+                style.flexDirection.row
+                style.gap 20
+                style.padding 20
+            ]
+            prop.children [
+                DndContext
+                    (fun e -> 
+                        if not (isNullOrUndefined e?over) then
+                            printfn $"Drag from: {e?active?id} to {e?over?id}"
+                        dispatch (DndKitDragEnded e)
+                    )
+                    [ 
+                        DndDiv {
+                            id = "dropZone1"
+                            onDrop = (fun _ -> dispatch (ExternalDropped "externalEl"))
+                            children = 
+                                Html.div [
+                                    prop.text (
+                                        match model.DroppedItem with
+                                        | Some item -> $"Dropped: {item}"
+                                        | None -> "Drop Zone 1"
+                                    )
+                                ]
+                        }
+                    ]
+            ]
+        ]
     ]
+let view model dispatch =
+    App model dispatch
